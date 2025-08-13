@@ -1,0 +1,81 @@
+name: Build mlc4j AAR
+on:
+  workflow_dispatch:
+jobs:
+  build-mlc4j:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout mlc-llm
+        uses: actions/checkout@v4
+        with:
+          repository: mlc-ai/mlc-llm
+          path: mlc-llm
+          submodules: recursive
+          lfs: true
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-lfs unzip gradle
+          git lfs install
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            ndk;29.0.13846066
+      - name: Install MLC Python wheels (CPU)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -f https://mlc.ai/wheels mlc-ai-nightly
+          python - <<'PY'
+import tvm, mlc_llm
+print('TVM:', tvm.__version__)
+print('mlc_llm:', mlc_llm.__file__)
+PY
+      - name: Prepare mlc4j libs (arm64 Vulkan)
+        working-directory: mlc-llm/android
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_NDK: ${{ env.ANDROID_NDK }}
+        run: |
+          set -euxo pipefail
+          python mlc4j/prepare_libs.py --help || true
+          if python mlc4j/prepare_libs.py --dest dist/lib/mlc4j --abi arm64-v8a 
+--backend vulkan; then
+            echo 'Prepared with --dest/--abi/--backend'
+          else
+            python mlc4j/prepare_libs.py --out dist/lib/mlc4j --abis arm64-v8a -
+-backends vulkan
+            echo 'Prepared with --out/--abis/--backends'
+          fi
+          ls -la dist/lib/mlc4j || true
+          ls -la dist/lib/mlc4j/output || true
+      - name: Generate Gradle wrapper if missing
+        working-directory: mlc-llm/android/MLCEngineExample
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          if [ ! -f "./gradlew" ]; then
+            gradle wrapper
+          fi
+          chmod +x ./gradlew
+          ./gradlew --version
+      - name: Build mlc4j AAR
+        working-directory: mlc-llm/android/MLCEngineExample
+        run: |
+          ./gradlew :mlc4j:assembleRelease --no-daemon --stacktrace
+          ls -R ../dist/lib/mlc4j/build/outputs/aar || true
+      - name: Upload AAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlc4j-release
+          path: mlc-llm/android/dist/lib/mlc4j/build/outputs/aar/*.aar
