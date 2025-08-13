@@ -46,7 +46,7 @@ PY
         working-directory: mlc-llm/android
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROID_NDK: ${{ env.ANDROID_NDK }}
+          ANDROID_NDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/29.0.13846066
         run: |
           set -euxo pipefail
           python mlc4j/prepare_libs.py --help || true
