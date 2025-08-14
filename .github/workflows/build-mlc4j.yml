@@ -1,6 +1,10 @@
 name: Build mlc4j AAR
 on:
   workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/build-mlc4j.yml"
 jobs:
   build-mlc4j:
     runs-on: ubuntu-22.04
