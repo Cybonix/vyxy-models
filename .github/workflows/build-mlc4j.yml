@@ -16,20 +16,24 @@ jobs:
           path: mlc-llm
           submodules: recursive
           lfs: true
+
       - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y git-lfs unzip gradle
           git lfs install
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Android SDK + NDK
         uses: android-actions/setup-android@v3
         with:
@@ -37,20 +41,29 @@ jobs:
             platforms;android-34
             build-tools;34.0.0
             ndk;29.0.13846066
+
+      - name: Debug env
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+          python --version
+          javac -version
+          sdkmanager --list | head -n 50 || true
+
       - name: Install MLC Python wheels (CPU)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -f https://mlc.ai/wheels mlc-ai-nightly
           python - <<'PY'
-import tvm, mlc_llm
+import tvm, mlc_llm, sys
 print('TVM:', tvm.__version__)
 print('mlc_llm:', mlc_llm.__file__)
+print('Python:', sys.version)
 PY
+
       - name: Prepare mlc4j libs (arm64 Vulkan)
         working-directory: mlc-llm/android
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROID_NDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/29.0.13846066
         run: |
           set -euxo pipefail
           python mlc4j/prepare_libs.py --help || true
@@ -64,6 +77,7 @@ PY
           fi
           ls -la dist/lib/mlc4j || true
           ls -la dist/lib/mlc4j/output || true
+
       - name: Generate Gradle wrapper if missing
         working-directory: mlc-llm/android/MLCEngineExample
         run: |
@@ -73,11 +87,13 @@ PY
           fi
           chmod +x ./gradlew
           ./gradlew --version
+
       - name: Build mlc4j AAR
         working-directory: mlc-llm/android/MLCEngineExample
         run: |
           ./gradlew :mlc4j:assembleRelease --no-daemon --stacktrace
           ls -R ../dist/lib/mlc4j/build/outputs/aar || true
+
       - name: Upload AAR artifact
         uses: actions/upload-artifact@v4
         with:
